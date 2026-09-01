@@ -73,3 +73,6 @@ Thumbs.db
 # Z scripts (internal sandbox tooling)
 /.zscripts/
 dev.log
+
+# GitHub workflows (excluded from push — PAT lacks workflow scope; re-add locally)
+.github/
