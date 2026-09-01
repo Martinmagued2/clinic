@@ -80,6 +80,62 @@ export async function clearSessionCookie(): Promise<void> {
   store.delete(COOKIE_NAME)
 }
 
+// ---- patient portal session (separate cookie namespace) --------------
+
+const PATIENT_COOKIE_NAME = 'ccc_patient_session'
+
+export async function setPatientSessionCookie(accountId: string): Promise<void> {
+  const token = sign(`patient:${accountId}`)
+  const store = await cookies()
+  store.set(PATIENT_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+  })
+}
+
+export async function clearPatientSessionCookie(): Promise<void> {
+  const store = await cookies()
+  store.delete(PATIENT_COOKIE_NAME)
+}
+
+export type CurrentPatient = {
+  accountId: string
+  patientId: string
+  clinicId: string
+  email: string
+  firstName: string
+  lastName: string
+  patientCode: string
+}
+
+export async function getCurrentPatient(): Promise<CurrentPatient | null> {
+  const store = await cookies()
+  const token = store.get(PATIENT_COOKIE_NAME)?.value
+  if (!token) return null
+  const raw = verify(token)
+  if (!raw || !raw.startsWith('patient:')) return null
+  const accountId = raw.slice('patient:'.length)
+
+  const account = await db.patientAccount.findUnique({
+    where: { id: accountId },
+    include: { patient: true },
+  })
+  if (!account || account.status !== 'ACTIVE') return null
+
+  return {
+    accountId: account.id,
+    patientId: account.patientId,
+    clinicId: account.clinicId,
+    email: account.email,
+    firstName: account.patient.firstName,
+    lastName: account.patient.lastName,
+    patientCode: account.patient.patientCode,
+  }
+}
+
 // ---- current user -----------------------------------------------------
 
 export type CurrentUser = {

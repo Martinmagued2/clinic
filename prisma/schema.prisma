@@ -55,6 +55,7 @@ model Clinic {
   documents    Document[]
   labResults   LabResult[]
   refunds      Refund[]
+  patientAccounts PatientAccount[]
 }
 
 model Branch {
@@ -225,6 +226,7 @@ model Patient {
   queueEntries     QueueEntry[]
   documents        Document[]
   labResults       LabResult[]
+  patientAccount   PatientAccount?
 
   @@unique([clinicId, patientCode])
   @@index([clinicId])
@@ -645,7 +647,7 @@ model PasswordReset {
 model PatientAccount {
   id           String   @id @default(cuid())
   clinicId     String
-  patientId    String
+  patientId    String   @unique
   email        String   @unique
   passwordHash String
   status       String   @default("ACTIVE")
@@ -653,5 +655,8 @@ model PatientAccount {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@index([patientId])
+  clinic       Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
 }

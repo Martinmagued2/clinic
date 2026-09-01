@@ -452,6 +452,18 @@ async function main() {
     ],
   })
 
+  // 11. Patient portal account (for the first patient — Ahmed Ali)
+  const firstPatient = patients[0]
+  await db.patientAccount.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: firstPatient.id,
+      email: 'ahmed.ali@patient.portal',
+      passwordHash: hashPassword('patient123'),
+      status: 'ACTIVE',
+    },
+  })
+
   console.log('✅ Seed complete.')
   console.log('')
   console.log('Login credentials (dev only):')
@@ -459,6 +471,7 @@ async function main() {
   console.log('  Doctor:        ahmed@clinic.test / doctor123')
   console.log('  Receptionist:  reception1@clinic.test / reception123')
   console.log('  Nurse:         nurse1@clinic.test / nurse123')
+  console.log('  Patient Portal: ahmed.ali@patient.portal / patient123')
 }
 
 main()

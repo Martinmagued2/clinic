@@ -1,6 +1,6 @@
 // Patient Portal — login + dashboard for patients (spec #39)
-// Patients can log in with their PatientAccount credentials to view their
-// appointments, prescriptions, invoices, and lab results.
+// Patients log in with their PatientAccount credentials (created by staff)
+// to view their appointments, prescriptions, invoices, and lab results.
 
 'use client'
 
@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { HeartPulse, ArrowLeft, Loader2, Calendar, Pill, Receipt, FlaskConical } from 'lucide-react'
-import { formatDate, formatDateTime, formatCurrency } from '@/lib/format'
+import { HeartPulse, ArrowLeft, Calendar, Pill, Receipt, FlaskConical } from 'lucide-react'
+import { formatDate, formatCurrency } from '@/lib/format'
 
 type PatientUser = {
   id: string
@@ -29,6 +29,22 @@ export function PatientPortalView() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [bootstrapping, setBootstrapping] = useState(true)
+
+  // Check if already logged in (via patient session cookie)
+  useEffect(() => {
+    const restore = async () => {
+      try {
+        const data = await api<{ patient: PatientUser }>('/api/patient-portal/auth')
+        setPatient(data.patient)
+      } catch {
+        // not logged in — show login form
+      } finally {
+        setBootstrapping(false)
+      }
+    }
+    restore()
+  }, [])
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,6 +68,14 @@ export function PatientPortalView() {
     setPatient(null)
     setEmail('')
     setPassword('')
+  }
+
+  if (bootstrapping) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
   }
 
   // Login form
@@ -80,7 +104,7 @@ export function PatientPortalView() {
             </div>
             {error && <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{error}</div>}
             <Button type="submit" disabled={loading} className="w-full">
-              {loading && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />} Sign In
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
           <div className="mt-4 text-xs text-muted-foreground text-center">
@@ -96,34 +120,27 @@ export function PatientPortalView() {
 
 function PatientDashboard({ patient, onLogout, onBack }: { patient: PatientUser; onLogout: () => void; onBack: () => void }) {
   const [tab, setTab] = useState<'appointments' | 'prescriptions' | 'invoices' | 'lab-results'>('appointments')
-  const [data, setData] = useState<{
-    appointments: unknown[]
-    prescriptions: unknown[]
-    invoices: unknown[]
-    labResults: unknown[]
-  } | null>(null)
+  const [appointments, setAppointments] = useState<unknown[]>([])
+  const [prescriptions, setPrescriptions] = useState<unknown[]>([])
+  const [invoices, setInvoices] = useState<unknown[]>([])
+  const [labResults, setLabResults] = useState<unknown[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Load all patient data in parallel
     const load = async () => {
       try {
-        // We'll reuse the existing APIs with the patient's ID
-        // Note: the patient portal uses a separate session, but for now
-        // we'll use the staff API since we're logged in as staff too.
-        // In production, this would use patient-portal specific endpoints.
-        const [appts, rx, inv, labs] = await Promise.all([
-          api<{ appointments: unknown[] }>(`/api/appointments`).catch(() => ({ appointments: [] })),
-          api<{ prescriptions: unknown[] }>(`/api/prescriptions`).catch(() => ({ prescriptions: [] })),
-          api<{ invoices: unknown[] }>(`/api/invoices`).catch(() => ({ invoices: [] })),
-          api<{ labResults: unknown[] }>(`/api/lab-results`).catch(() => ({ labResults: [] })),
+        const [a, p, i, l] = await Promise.all([
+          api<{ appointments: unknown[] }>('/api/patient-portal/appointments'),
+          api<{ prescriptions: unknown[] }>('/api/patient-portal/prescriptions'),
+          api<{ invoices: unknown[] }>('/api/patient-portal/invoices'),
+          api<{ labResults: unknown[] }>('/api/patient-portal/lab-results'),
         ])
-        setData({
-          appointments: appts.appointments || [],
-          prescriptions: rx.prescriptions || [],
-          invoices: inv.invoices || [],
-          labResults: labs.labResults || [],
-        })
+        setAppointments(a.appointments || [])
+        setPrescriptions(p.prescriptions || [])
+        setInvoices(i.invoices || [])
+        setLabResults(l.labResults || [])
+      } catch {
+        // ignore
       } finally {
         setLoading(false)
       }
@@ -154,40 +171,38 @@ function PatientDashboard({ patient, onLogout, onBack }: { patient: PatientUser;
       <main className="max-w-5xl mx-auto p-4 lg:p-6 space-y-4">
         <div className="flex gap-2 flex-wrap">
           {([
-            { key: 'appointments', label: 'Appointments', icon: Calendar },
-            { key: 'prescriptions', label: 'Prescriptions', icon: Pill },
-            { key: 'invoices', label: 'Invoices', icon: Receipt },
-            { key: 'lab-results', label: 'Lab Results', icon: FlaskConical },
-          ] as const).map(({ key, label, icon: Icon }) => (
+            { key: 'appointments', label: 'Appointments', icon: Calendar, count: appointments.length },
+            { key: 'prescriptions', label: 'Prescriptions', icon: Pill, count: prescriptions.length },
+            { key: 'invoices', label: 'Invoices', icon: Receipt, count: invoices.length },
+            { key: 'lab-results', label: 'Lab Results', icon: FlaskConical, count: labResults.length },
+          ] as const).map(({ key, label, icon: Icon, count }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm ${tab === key ? 'bg-primary text-primary-foreground' : 'border hover:bg-accent'}`}
             >
-              <Icon className="w-4 h-4" /> {label}
+              <Icon className="w-4 h-4" /> {label} ({count})
             </button>
           ))}
         </div>
 
         {loading ? (
           <div className="text-center py-12 text-muted-foreground">Loading your records...</div>
-        ) : !data ? (
-          <div className="text-center py-12 text-muted-foreground">Unable to load records.</div>
         ) : (
           <>
             {tab === 'appointments' && (
               <Card>
                 <CardHeader><CardTitle className="text-base">Your Appointments</CardTitle></CardHeader>
                 <CardContent>
-                  {data.appointments.length === 0 ? (
+                  {appointments.length === 0 ? (
                     <div className="text-center py-8 text-sm text-muted-foreground">No appointments found.</div>
                   ) : (
                     <div className="divide-y">
-                      {(data.appointments as Array<{ id: string; date: string; startTime: string; endTime: string; status: string; doctor: { name: string }; service: { name: string } | null }>).map((a) => (
+                      {(appointments as Array<{ id: string; date: string; startTime: string; endTime: string; status: string; doctor: { name: string; specialty: string }; service: { name: string } | null }>).map((a) => (
                         <div key={a.id} className="py-3 flex items-center justify-between">
                           <div>
                             <div className="font-medium text-sm">{formatDate(a.date)} at {a.startTime}</div>
-                            <div className="text-xs text-muted-foreground">{a.doctor.name} · {a.service?.name ?? 'Appointment'}</div>
+                            <div className="text-xs text-muted-foreground">{a.doctor.name} ({a.doctor.specialty}) · {a.service?.name ?? 'Appointment'}</div>
                           </div>
                           <Badge variant="secondary">{a.status.replace(/_/g, ' ')}</Badge>
                         </div>
@@ -202,22 +217,24 @@ function PatientDashboard({ patient, onLogout, onBack }: { patient: PatientUser;
               <Card>
                 <CardHeader><CardTitle className="text-base">Your Prescriptions</CardTitle></CardHeader>
                 <CardContent>
-                  {data.prescriptions.length === 0 ? (
+                  {prescriptions.length === 0 ? (
                     <div className="text-center py-8 text-sm text-muted-foreground">No prescriptions found.</div>
                   ) : (
                     <div className="space-y-3">
-                      {(data.prescriptions as Array<{ id: string; prescriptionCode: string; createdAt: string; doctor: { name: string }; items: Array<{ medicationName: string; dosage: string | null; frequency: string | null }> }>).map((rx) => (
+                      {(prescriptions as Array<{ id: string; prescriptionCode: string; createdAt: string; doctor: { name: string }; items: Array<{ medicationName: string; strength: string | null; dosage: string | null; frequency: string | null; duration: string | null }> }>).map((rx) => (
                         <div key={rx.id} className="border rounded-md p-3">
                           <div className="flex justify-between text-sm">
                             <span className="font-mono font-medium">{rx.prescriptionCode}</span>
                             <span className="text-xs text-muted-foreground">{formatDate(rx.createdAt)}</span>
                           </div>
-                          <div className="text-xs text-muted-foreground mb-2">{rx.doctor.name}</div>
+                          <div className="text-xs text-muted-foreground mb-2">Prescribed by {rx.doctor.name}</div>
                           <div className="space-y-1">
                             {rx.items.map((it, i) => (
-                              <div key={i} className="text-sm">
-                                <span className="font-medium">{it.medicationName}</span>
-                                <span className="text-muted-foreground"> — {it.dosage} · {it.frequency}</span>
+                              <div key={i} className="text-sm bg-muted/30 rounded p-2">
+                                <span className="font-medium">{it.medicationName}</span> {it.strength}
+                                <div className="text-xs text-muted-foreground">
+                                  {it.dosage} · {it.frequency} · {it.duration}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -233,19 +250,20 @@ function PatientDashboard({ patient, onLogout, onBack }: { patient: PatientUser;
               <Card>
                 <CardHeader><CardTitle className="text-base">Your Invoices</CardTitle></CardHeader>
                 <CardContent>
-                  {data.invoices.length === 0 ? (
+                  {invoices.length === 0 ? (
                     <div className="text-center py-8 text-sm text-muted-foreground">No invoices found.</div>
                   ) : (
                     <div className="divide-y">
-                      {(data.invoices as Array<{ id: string; invoiceCode: string; total: number; paidAmount: number; status: string; createdAt: string }>).map((inv) => (
+                      {(invoices as Array<{ id: string; invoiceCode: string; total: number; paidAmount: number; status: string; createdAt: string; items: unknown[]; payments: unknown[] }>).map((inv) => (
                         <div key={inv.id} className="py-3 flex items-center justify-between">
                           <div>
                             <div className="font-mono text-sm font-medium">{inv.invoiceCode}</div>
-                            <div className="text-xs text-muted-foreground">{formatDate(inv.createdAt)}</div>
+                            <div className="text-xs text-muted-foreground">{formatDate(inv.createdAt)} · {inv.items.length} item(s)</div>
                           </div>
                           <div className="text-right">
                             <div className="font-medium text-sm">{formatCurrency(inv.total)}</div>
-                            <Badge variant={inv.status === 'PAID' ? 'default' : 'secondary'} className="text-xs">{inv.status.replace(/_/g, ' ')}</Badge>
+                            <div className="text-xs text-muted-foreground">Paid: {formatCurrency(inv.paidAmount)}</div>
+                            <Badge variant={inv.status === 'PAID' ? 'default' : 'secondary'} className="text-xs mt-1">{inv.status.replace(/_/g, ' ')}</Badge>
                           </div>
                         </div>
                       ))}
@@ -259,15 +277,16 @@ function PatientDashboard({ patient, onLogout, onBack }: { patient: PatientUser;
               <Card>
                 <CardHeader><CardTitle className="text-base">Your Lab Results</CardTitle></CardHeader>
                 <CardContent>
-                  {data.labResults.length === 0 ? (
+                  {labResults.length === 0 ? (
                     <div className="text-center py-8 text-sm text-muted-foreground">No lab results found.</div>
                   ) : (
                     <div className="divide-y">
-                      {(data.labResults as Array<{ id: string; testName: string; resultValue: string; unit: string | null; status: string; reportedAt: string }>).map((lr) => (
+                      {(labResults as Array<{ id: string; testName: string; resultValue: string; unit: string | null; referenceRange: string | null; status: string; reportedAt: string }>).map((lr) => (
                         <div key={lr.id} className="py-3 flex items-center justify-between">
                           <div>
                             <div className="font-medium text-sm">{lr.testName}</div>
                             <div className="text-xs text-muted-foreground">{formatDate(lr.reportedAt)}</div>
+                            {lr.referenceRange && <div className="text-xs text-muted-foreground">Reference: {lr.referenceRange}</div>}
                           </div>
                           <div className="text-right">
                             <div className="font-mono text-sm">{lr.resultValue} {lr.unit || ''}</div>

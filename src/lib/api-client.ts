@@ -35,7 +35,10 @@ export async function api<T = unknown>(
     // Global 401 handler: session expired or cookie not sent.
     // Reset the user state so the LoginView renders. This runs once
     // per failure wave (the flag resets when login succeeds again).
-    if (status === 401 && !handlingAuthFailure) {
+    // IMPORTANT: Don't trigger logout for patient-portal endpoints —
+    // those use a separate cookie and a 401 there just means the patient
+    // isn't logged in (which is expected when viewing the portal).
+    if (status === 401 && !handlingAuthFailure && !path.includes('/patient-portal/')) {
       handlingAuthFailure = true
       // Defer to avoid calling setState during render of the caller
       queueMicrotask(() => {

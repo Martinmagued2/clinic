@@ -1,14 +1,18 @@
-// Patient portal auth — login using PatientAccount credentials (spec #39)
+// Patient portal auth — login / logout / me (spec #39)
+// Uses a SEPARATE cookie from staff sessions so the two never collide.
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import {
   verifyPassword,
-  setSessionCookie,
-  clearSessionCookie,
+  hashPassword,
+  setPatientSessionCookie,
+  clearPatientSessionCookie,
+  getCurrentPatient,
   apiSuccess,
   apiError,
   handleApiError,
+  AuthError,
 } from '@/lib/auth'
 import { rateLimit, getClientIP } from '@/lib/rate-limit'
 import { z } from 'zod'
@@ -44,9 +48,7 @@ export async function POST(req: NextRequest) {
       data: { lastLoginAt: new Date() },
     })
 
-    // Use a separate cookie namespace for patient portal
-    const token = `patient:${account.id}`
-    await setSessionCookie(token)
+    await setPatientSessionCookie(account.id)
 
     return apiSuccess({
       patient: {
@@ -61,11 +63,31 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function GET() {
+  try {
+    const patient = await getCurrentPatient()
+    if (!patient) throw new AuthError('UNAUTHENTICATED', 'Not authenticated.', 401)
+    return apiSuccess({
+      patient: {
+        id: patient.patientId,
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        patientCode: patient.patientCode,
+      },
+    })
+  } catch (err) {
+    return handleApiError(err)
+  }
+}
+
 export async function DELETE() {
   try {
-    await clearSessionCookie()
+    await clearPatientSessionCookie()
     return apiSuccess({ ok: true })
   } catch (err) {
     return handleApiError(err)
   }
 }
+
+// Export hashPassword for the staff account-creation route
+export { hashPassword }

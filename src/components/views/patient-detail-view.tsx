@@ -3,7 +3,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { api } from '@/lib/api-client'
+import { api, ApiError } from '@/lib/api-client'
 import { useApp } from '@/lib/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -163,6 +163,7 @@ export function PatientDetailView() {
           <TabsTrigger value="invoices">Invoices ({p.invoices.length})</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="portal">Portal Account</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -328,6 +329,14 @@ export function PatientDetailView() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="portal">
+          <Card>
+            <CardContent className="pt-4">
+              <PortalAccountTab patientId={p.id} patientEmail={p.email} />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   )
@@ -418,6 +427,152 @@ function DocumentsTab({ patientId }: { patientId: string }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PortalAccountTab({ patientId, patientEmail }: { patientId: string; patientEmail: string | null }) {
+  const { user } = useApp()
+  const [account, setAccount] = useState<{ id: string; email: string; status: string; lastLoginAt: string | null; createdAt: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [email, setEmail] = useState(patientEmail || '')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const canManage = user?.role === 'CLINIC_ADMIN' || user?.role === 'SUPER_ADMIN'
+
+  const load = async () => {
+    try {
+      const data = await api<{ account: typeof account }>(`/api/patients/${patientId}/portal-account`)
+      setAccount(data.account)
+      if (data.account) setShowForm(false)
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [patientId])
+
+  const createAccount = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (password.length < 8) {
+      toast.error('Password must be at least 8 characters.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await api(`/api/patients/${patientId}/portal-account`, {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
+      toast.success('Portal account created. The patient can now log in.')
+      setShowForm(false)
+      setPassword('')
+      load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to create account.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const deactivateAccount = async () => {
+    if (!confirm('Deactivate this patient\'s portal account? They will no longer be able to log in.')) return
+    try {
+      await api(`/api/patients/${patientId}/portal-account`, { method: 'DELETE' })
+      toast.success('Portal account deactivated.')
+      load()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed.')
+    }
+  }
+
+  if (loading) return <div className="text-sm text-muted-foreground">Loading...</div>
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm font-medium">Patient Portal Account</div>
+      <p className="text-xs text-muted-foreground">
+        A portal account lets the patient log in to view their appointments, prescriptions, invoices, and lab results online.
+      </p>
+
+      {account ? (
+        <div className="border rounded-md p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium">{account.email}</div>
+              <div className="text-xs text-muted-foreground">
+                Status: <span className={account.status === 'ACTIVE' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{account.status}</span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Created: {formatDate(account.createdAt)}
+                {account.lastLoginAt && ` · Last login: ${formatDate(account.lastLoginAt)}`}
+              </div>
+            </div>
+            <Badge variant={account.status === 'ACTIVE' ? 'default' : 'secondary'}>
+              {account.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+            </Badge>
+          </div>
+          {canManage && account.status === 'ACTIVE' && (
+            <Button size="sm" variant="outline" onClick={deactivateAccount}>
+              Deactivate Account
+            </Button>
+          )}
+          <div className="bg-muted/30 rounded p-3 text-xs">
+            <div className="font-medium mb-1">How the patient logs in:</div>
+            <div>1. Go to the Patient Portal page (sidebar → More → Patient Portal)</div>
+            <div>2. Enter their email: <code>{account.email}</code></div>
+            <div>3. Enter the password you set for them</div>
+          </div>
+        </div>
+      ) : showForm ? (
+        <form onSubmit={createAccount} className="border rounded-md p-4 space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Email (patient&apos;s login)</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full h-9 px-3 border rounded-md text-sm bg-background"
+              placeholder="patient@email.com"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Temporary password (min 8 chars)</label>
+            <input
+              type="text"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              className="w-full h-9 px-3 border rounded-md text-sm bg-background font-mono"
+              placeholder="Set a password for the patient"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">The patient can change this after logging in.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={submitting}>
+              {submitting ? 'Creating...' : 'Create Account'}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+          </div>
+        </form>
+      ) : canManage ? (
+        <div className="border rounded-md p-4 text-center">
+          <div className="text-sm text-muted-foreground mb-3">No portal account yet.</div>
+          <Button size="sm" onClick={() => setShowForm(true)}>
+            Create Portal Account
+          </Button>
+        </div>
+      ) : (
+        <div className="border rounded-md p-4 text-center text-sm text-muted-foreground">
+          No portal account. Ask a clinic admin to create one.
         </div>
       )}
     </div>

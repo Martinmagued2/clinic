@@ -101,6 +101,10 @@ export function LoginView() {
           <div>Doctor: ahmed@clinic.test / doctor123</div>
           <div>Reception: reception1@clinic.test / reception123</div>
           <div>Nurse: nurse1@clinic.test / nurse123</div>
+          <div className="mt-1 pt-1 border-t border-muted">
+            <div className="font-medium">Patient Portal:</div>
+            <div>ahmed.ali@patient.portal / patient123</div>
+          </div>
         </div>
       </div>
     </div>
