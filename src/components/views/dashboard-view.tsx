@@ -75,7 +75,11 @@ export function DashboardView() {
         const d = await api<Dashboard>('/api/dashboard')
         if (!cancelled) setData(d)
       } catch (err) {
-        console.error(err)
+        // 401 is handled globally (api-client resets user state → LoginView)
+        // Don't log auth errors to console; only log unexpected failures.
+        if (!(err instanceof Error && 'status' in err && err.status === 401)) {
+          console.error('Dashboard load failed:', err)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
