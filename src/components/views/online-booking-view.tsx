@@ -4,11 +4,12 @@
 
 import { useEffect, useState } from 'react'
 import { api, ApiError } from '@/lib/api-client'
+import { useApp } from '@/lib/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { CheckCircle2, Loader2, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 
 type Clinic = { id: string; name: string; phone: string | null; address: string | null; currency: string }
@@ -16,6 +17,7 @@ type Doctor = { id: string; name: string; specialty: string }
 type Service = { id: string; name: string; price: number; duration: number }
 
 export function OnlineBookingView() {
+  const { user } = useApp()
   const [clinics, setClinics] = useState<Clinic[]>([])
   const [clinicId, setClinicId] = useState('')
   const [doctors, setDoctors] = useState<Doctor[]>([])
@@ -110,9 +112,16 @@ export function OnlineBookingView() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted p-4 py-8">
       <div className="max-w-2xl mx-auto">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold">Book an Appointment</h1>
-          <p className="text-sm text-muted-foreground mt-1">Choose your doctor and time — quick and easy</p>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">Book an Appointment</h1>
+            <p className="text-sm text-muted-foreground mt-1">Choose your doctor and time — quick and easy</p>
+          </div>
+          {user && (
+            <Button variant="outline" size="sm" onClick={() => useApp.getState().setView('dashboard')}>
+              <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to App
+            </Button>
+          )}
         </div>
 
         <form onSubmit={submit} className="space-y-4">

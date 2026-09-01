@@ -88,6 +88,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { view: 'follow-ups', label: 'Follow-ups', icon: CalendarClock, permission: 'medical_records.view' },
       { view: 'waiting-room', label: 'Waiting Room Display', icon: Tv },
       { view: 'online-booking', label: 'Online Booking (Public)', icon: Globe },
+      { view: 'patient-portal', label: 'Patient Portal', icon: UserCog },
     ],
   },
 ]

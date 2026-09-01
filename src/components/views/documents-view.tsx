@@ -1,4 +1,4 @@
-// Documents view (spec #33)
+// Documents view (spec #33) — list + upload with patient selector
 
 'use client'
 
@@ -24,17 +24,22 @@ type Doc = {
   uploadedBy: { name: string }
 }
 
+type Patient = { id: string; firstName: string; lastName: string; patientCode: string }
+
 export function DocumentsView() {
-  const { viewParam, setView } = useApp() // viewParam = patientId (optional filter)
+  const { viewParam } = useApp() // viewParam = patientId (optional filter)
   const [docs, setDocs] = useState<Doc[]>([])
+  const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [filterPatientId, setFilterPatientId] = useState(viewParam || '')
+  const [uploadPatientId, setUploadPatientId] = useState(viewParam || '')
+  const [category, setCategory] = useState('OTHER')
   const fileRef = useRef<HTMLInputElement>(null)
-  const [patientIdForUpload, setPatientIdForUpload] = useState<string>('')
 
   const load = async () => {
     try {
-      const url = viewParam ? `/api/documents?patientId=${viewParam}` : '/api/documents'
+      const url = filterPatientId ? `/api/documents?patientId=${filterPatientId}` : '/api/documents'
       const data = await api<{ documents: Doc[] }>(url)
       setDocs(data.documents)
     } finally {
@@ -43,14 +48,19 @@ export function DocumentsView() {
   }
 
   useEffect(() => {
-    if (viewParam) setPatientIdForUpload(viewParam)
+    api<{ patients: Patient[] }>('/api/patients?pageSize=200').then((d) => setPatients(d.patients)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    setFilterPatientId(viewParam || '')
+    setUploadPatientId(viewParam || '')
     load()
-  }, [viewParam])
+  }, [viewParam, filterPatientId])
 
   const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!patientIdForUpload) {
+    if (!uploadPatientId) {
       toast.error('Please select a patient first.')
       return
     }
@@ -58,13 +68,17 @@ export function DocumentsView() {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      fd.append('patientId', patientIdForUpload)
-      fd.append('category', 'OTHER')
-      await fetch('/api/documents', { method: 'POST', body: fd, credentials: 'same-origin' })
+      fd.append('patientId', uploadPatientId)
+      fd.append('category', category)
+      const res = await fetch('/api/documents', { method: 'POST', body: fd, credentials: 'same-origin' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error?.message || 'Upload failed')
+      }
       toast.success('Document uploaded.')
       load()
-    } catch {
-      toast.error('Upload failed.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed.')
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -73,36 +87,64 @@ export function DocumentsView() {
 
   return (
     <div className="p-4 lg:p-6 space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold">
-          Documents {viewParam ? '(filtered)' : ''}
-        </h2>
-        <div className="flex gap-2">
-          {!viewParam && (
-            <select
-              className="h-9 px-3 border rounded-md text-sm bg-background"
-              value={patientIdForUpload}
-              onChange={(e) => setPatientIdForUpload(e.target.value)}
-            >
-              <option value="">Select patient for upload...</option>
-              {/* patients would be loaded — for simplicity, instruct user to upload from patient profile */}
-            </select>
-          )}
-          <input ref={fileRef} type="file" onChange={upload} className="hidden" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx" />
-          <Button size="sm" disabled={uploading || !patientIdForUpload} onClick={() => fileRef.current?.click()}>
-            <Upload className="w-4 h-4 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload'}
-          </Button>
-        </div>
-      </div>
+      <h2 className="text-lg font-semibold">Documents {viewParam ? '(filtered)' : ''}</h2>
 
       <Card>
+        <div className="p-3 border-b flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-xs text-muted-foreground block mb-1">Filter by patient</label>
+            <select
+              className="w-full h-9 px-3 border rounded-md text-sm bg-background"
+              value={filterPatientId}
+              onChange={(e) => setFilterPatientId(e.target.value)}
+            >
+              <option value="">All patients</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>{p.firstName} {p.lastName} ({p.patientCode})</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-xs text-muted-foreground block mb-1">Upload to patient</label>
+            <select
+              className="w-full h-9 px-3 border rounded-md text-sm bg-background"
+              value={uploadPatientId}
+              onChange={(e) => setUploadPatientId(e.target.value)}
+            >
+              <option value="">Select patient...</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>{p.firstName} {p.lastName} ({p.patientCode})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Category</label>
+            <select
+              className="h-9 px-3 border rounded-md text-sm bg-background"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="OTHER">Other</option>
+              <option value="MEDICAL_REPORT">Medical Report</option>
+              <option value="LAB_RESULT">Lab Result</option>
+              <option value="XRAY">X-Ray</option>
+              <option value="SCAN">Scan</option>
+            </select>
+          </div>
+          <div>
+            <input ref={fileRef} type="file" onChange={upload} className="hidden" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx" />
+            <Button size="sm" disabled={uploading || !uploadPatientId} onClick={() => fileRef.current?.click()}>
+              <Upload className="w-4 h-4 mr-1.5" /> {uploading ? 'Uploading...' : 'Upload'}
+            </Button>
+          </div>
+        </div>
+
         {loading ? (
           <div className="text-center py-12 text-muted-foreground">Loading...</div>
         ) : docs.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground">
             <FolderOpen className="w-10 h-10 mx-auto mb-2 opacity-50" />
             <div>No documents yet.</div>
-            {viewParam === null && <div className="text-xs mt-1">Upload documents from a patient's profile.</div>}
           </div>
         ) : (
           <div className="divide-y">
@@ -122,7 +164,7 @@ export function DocumentsView() {
                     {d.patient.firstName} {d.patient.lastName} ({d.patient.patientCode}) · {formatDate(d.createdAt)} · {d.uploadedBy.name}
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs">{d.category}</Badge>
+                <Badge variant="outline" className="text-xs">{d.category.replace(/_/g, ' ')}</Badge>
               </div>
             ))}
           </div>

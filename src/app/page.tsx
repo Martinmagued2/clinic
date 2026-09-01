@@ -41,6 +41,7 @@ import { FollowUpsView } from '@/components/views/follow-ups-view'
 import { BranchesView } from '@/components/views/branches-view'
 import { WaitingRoomView } from '@/components/views/waiting-room-view'
 import { OnlineBookingView } from '@/components/views/online-booking-view'
+import { PatientPortalView } from '@/components/views/patient-portal-view'
 import { Loader2 } from 'lucide-react'
 
 export default function Home() {
@@ -92,7 +93,7 @@ export default function Home() {
   }
 
   // Public views — no auth required
-  if (view === 'online-booking' || view === 'waiting-room') {
+  if (view === 'online-booking' || view === 'waiting-room' || view === 'patient-portal') {
     return (
       <>
         {renderView(view)}
@@ -168,6 +169,7 @@ export default function Home() {
       case 'branches': return <BranchesView />
       case 'waiting-room': return <WaitingRoomView />
       case 'online-booking': return <OnlineBookingView />
+      case 'patient-portal': return <PatientPortalView />
       default: return <DashboardView />
     }
   }

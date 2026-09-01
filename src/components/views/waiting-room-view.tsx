@@ -7,6 +7,7 @@ import { api } from '@/lib/api-client'
 import { useApp } from '@/lib/app-store'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { ArrowLeft } from 'lucide-react'
 
 type Data = {
   clinic: { name: string; code: string | null }
@@ -44,15 +45,13 @@ export function WaitingRoomView() {
             <h1 className="text-3xl font-bold">{data?.clinic.name || 'Clinic'}</h1>
             <p className="text-slate-400">Now Serving</p>
           </div>
-          {!user && (
-            <select
-              className="bg-slate-800 text-white px-3 py-2 rounded border border-slate-700"
-              value={clinicId}
-              onChange={(e) => setClinicId(e.target.value)}
-            >
-              <option value="">Select clinic...</option>
-            </select>
-          )}
+          <div className="flex items-center gap-2">
+            {user && (
+              <Button variant="outline" size="sm" className="bg-slate-800 border-slate-700 text-white hover:bg-slate-700" onClick={() => useApp.getState().setView('dashboard')}>
+                <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to App
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

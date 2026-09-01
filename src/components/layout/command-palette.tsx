@@ -48,6 +48,7 @@ const ALL_COMMANDS: Command[] = [
   { id: 'branches', label: 'Branches & Rooms', icon: Building2, view: 'branches' },
   { id: 'waiting-room', label: 'Waiting Room Display', icon: Tv, view: 'waiting-room' },
   { id: 'online-booking', label: 'Online Booking (Public)', icon: Globe, view: 'online-booking' },
+  { id: 'patient-portal', label: 'Patient Portal', icon: UserCog, view: 'patient-portal' },
 ]
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
