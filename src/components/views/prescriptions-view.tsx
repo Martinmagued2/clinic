@@ -1,12 +1,14 @@
-// Prescriptions list (spec #23, #25)
+// Prescriptions list (spec #23, #25) with print + create buttons
 
 'use client'
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api-client'
+import { useApp } from '@/lib/app-store'
 import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Pill } from 'lucide-react'
+import { Pill, Plus, Printer } from 'lucide-react'
 import { formatDateTime } from '@/lib/format'
 
 type Prescription = {
@@ -27,6 +29,7 @@ type Prescription = {
 }
 
 export function PrescriptionsView() {
+  const { setView, hasPermission } = useApp()
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -46,7 +49,14 @@ export function PrescriptionsView() {
 
   return (
     <div className="p-4 lg:p-6 space-y-4">
-      <h2 className="text-lg font-semibold">Prescriptions</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-semibold">Prescriptions</h2>
+        {hasPermission('prescriptions.create') && (
+          <Button onClick={() => setView('prescription-detail', '')}>
+            <Plus className="w-4 h-4 mr-1.5" /> New Prescription
+          </Button>
+        )}
+      </div>
 
       {loading ? (
         <div className="text-center py-12 text-muted-foreground">Loading...</div>
@@ -68,7 +78,7 @@ export function PrescriptionsView() {
                 </div>
                 <div className="text-sm font-medium">{rx.patient.firstName} {rx.patient.lastName}</div>
                 <div className="text-xs text-muted-foreground mb-3">{rx.doctor.name} · {formatDateTime(rx.createdAt)}</div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 mb-3">
                   {rx.items.map((it, i) => (
                     <div key={i} className="text-xs bg-muted/50 rounded p-2">
                       <div className="font-medium">{it.medicationName} {it.strength}</div>
@@ -78,6 +88,14 @@ export function PrescriptionsView() {
                     </div>
                   ))}
                 </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.open(`/api/print/prescription/${rx.id}`, '_blank')}
+                >
+                  <Printer className="w-3 h-3 mr-1" /> Print
+                </Button>
               </div>
             </Card>
           ))}

@@ -3,7 +3,7 @@
 'use client'
 
 import { useApp, type AppView } from '@/lib/app-store'
-import { Menu, Bell } from 'lucide-react'
+import { Menu, Bell, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api-client'
 
@@ -31,7 +31,7 @@ const VIEW_TITLES: Record<AppView, string> = {
   settings: 'Settings',
 }
 
-export function Topbar() {
+export function Topbar({ onOpenPalette }: { onOpenPalette?: () => void }) {
   const { view, setSidebarOpen, sidebarOpen, user, logout } = useApp()
   const [unread, setUnread] = useState(0)
 
@@ -66,6 +66,18 @@ export function Topbar() {
       <h1 className="text-lg font-semibold flex-1 truncate">
         {VIEW_TITLES[view] || 'Clinic Command Center'}
       </h1>
+
+      {onOpenPalette && (
+        <button
+          className="hidden md:flex items-center gap-2 px-3 py-1.5 border rounded-md text-xs text-muted-foreground hover:bg-accent"
+          onClick={onOpenPalette}
+          title="Open command palette (Ctrl+K)"
+        >
+          <Search className="w-3 h-3" />
+          <span>Search...</span>
+          <kbd className="border px-1 rounded text-[10px]">⌘K</kbd>
+        </button>
+      )}
 
       <button
         className="relative p-2 rounded hover:bg-accent"

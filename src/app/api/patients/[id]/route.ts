@@ -121,3 +121,31 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     return handleApiError(err)
   }
 }
+
+// Soft-delete a patient (spec #52)
+export async function DELETE(_req: NextRequest, { params }: RouteParams) {
+  try {
+    const user = await requirePermission('patients.delete')
+    const { id } = await params
+    const existing = await db.patient.findUnique({ where: { id } })
+    if (!existing || existing.clinicId !== user.clinicId) {
+      return apiError('NOT_FOUND', 'Patient not found.', 404)
+    }
+    const patient = await db.patient.update({
+      where: { id },
+      data: { deletedAt: new Date(), status: 'ARCHIVED' },
+    })
+    await audit({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: 'PATIENT_SOFT_DELETED',
+      entityType: 'Patient',
+      entityId: id,
+      oldValues: { status: existing.status },
+      newValues: { status: 'ARCHIVED', deletedAt: patient.deletedAt },
+    })
+    return apiSuccess({ ok: true })
+  } catch (err) {
+    return handleApiError(err)
+  }
+}

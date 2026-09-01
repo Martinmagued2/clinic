@@ -131,6 +131,17 @@ export async function POST(req: NextRequest) {
       newValues: appointment,
     })
 
+    // Send confirmation (email/WhatsApp) — spec #36, #37
+    const { notifyAppointmentConfirmation } = await import('@/lib/notifications')
+    await notifyAppointmentConfirmation({
+      patientPhone: appointment.patient.phone,
+      patientEmail: appointment.patient.email,
+      patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+      doctorName: appointment.doctor.name,
+      date: apptDate.toLocaleDateString('en-GB'),
+      time: appointment.startTime,
+    })
+
     return apiSuccess({ appointment }, 201)
   } catch (err) {
     return handleApiError(err)

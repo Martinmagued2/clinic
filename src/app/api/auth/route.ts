@@ -14,6 +14,7 @@ import {
   handleApiError,
   AuthError,
 } from '@/lib/auth'
+import { rateLimit, getClientIP } from '@/lib/rate-limit'
 import { z } from 'zod'
 
 const loginSchema = z.object({
@@ -23,12 +24,33 @@ const loginSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 10 login attempts per minute per IP (spec #6, #23)
+    const ip = getClientIP(req)
+    const rl = rateLimit(`login:${ip}`, 10, 60_000)
+    if (!rl.allowed) {
+      return apiError(
+        'RATE_LIMITED',
+        'Too many login attempts. Please try again in a minute.',
+        429,
+      )
+    }
+
     const body = await req.json()
     const parsed = loginSchema.safeParse(body)
     if (!parsed.success) {
       return apiError('VALIDATION_ERROR', 'Invalid email or password.', 400)
     }
     const { email, password } = parsed.data
+
+    // Per-account rate limit: 5 failed attempts per 15 minutes per email
+    const accountRl = rateLimit(`login-account:${email.toLowerCase()}`, 5, 15 * 60_000)
+    if (!accountRl.allowed) {
+      return apiError(
+        'ACCOUNT_LOCKED',
+        'Too many failed attempts for this account. Please try again in 15 minutes.',
+        429,
+      )
+    }
 
     const user = await db.user.findUnique({
       where: { email: email.toLowerCase() },

@@ -21,6 +21,12 @@ import {
   ShieldCheck,
   Settings,
   HeartPulse,
+  FileText,
+  FlaskConical,
+  CalendarClock,
+  Building2,
+  Tv,
+  Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -68,9 +74,20 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { view: 'doctors', label: 'Doctors', icon: Stethoscope, permission: 'doctors.view' },
       { view: 'staff', label: 'Staff', icon: UserCog, permission: 'staff.view' },
+      { view: 'branches', label: 'Branches & Rooms', icon: Building2 },
       { view: 'reports', label: 'Reports', icon: BarChart3, permission: 'reports.view' },
       { view: 'audit-logs', label: 'Audit Logs', icon: ShieldCheck, permission: 'audit.view' },
       { view: 'settings', label: 'Settings', icon: Settings, permission: 'settings.view' },
+    ],
+  },
+  {
+    title: 'More',
+    items: [
+      { view: 'documents', label: 'Documents', icon: FileText, permission: 'patients.view' },
+      { view: 'lab-results', label: 'Lab Results', icon: FlaskConical, permission: 'patients.view' },
+      { view: 'follow-ups', label: 'Follow-ups', icon: CalendarClock, permission: 'medical_records.view' },
+      { view: 'waiting-room', label: 'Waiting Room Display', icon: Tv },
+      { view: 'online-booking', label: 'Online Booking (Public)', icon: Globe },
     ],
   },
 ]

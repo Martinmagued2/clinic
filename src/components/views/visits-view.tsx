@@ -29,28 +29,46 @@ type Doctor = { id: string; name: string; specialty: string }
 type Patient = { id: string; firstName: string; lastName: string; patientCode: string }
 
 export function VisitsView() {
-  const { setView, hasPermission } = useApp()
+  const { setView, hasPermission, user } = useApp()
   const [visits, setVisits] = useState<Visit[]>([])
   const [loading, setLoading] = useState(true)
+  const [doctorFilter, setDoctorFilter] = useState<string>(user?.role === 'DOCTOR' && user.doctorId ? user.doctorId : '')
+  const [doctors, setDoctors] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
     let cancelled = false
     const load = async () => {
       try {
-        const data = await api<{ visits: Visit[] }>('/api/visits')
+        const url = `/api/visits${doctorFilter ? `?doctorId=${doctorFilter}` : ''}`
+        const data = await api<{ visits: Visit[] }>(url)
         if (!cancelled) setVisits(data.visits)
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
     load()
+    api<{ doctors: { id: string; name: string }[] }>('/api/doctors').then((d) => setDoctors(d.doctors)).catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [doctorFilter])
 
   return (
     <div className="p-4 lg:p-6 space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Recent Visits</h2>
+      <div className="flex justify-between items-center flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Recent Visits</h2>
+          {user?.role !== 'DOCTOR' && (
+            <select
+              className="h-9 px-3 border rounded-md text-sm bg-background"
+              value={doctorFilter}
+              onChange={(e) => setDoctorFilter(e.target.value)}
+            >
+              <option value="">All doctors</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
         {hasPermission('medical_records.create') && (
           <Button onClick={() => setView('visit-new')}>
             <Plus className="w-4 h-4 mr-1.5" /> New Visit
@@ -70,7 +88,11 @@ export function VisitsView() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {visits.map((v) => (
-            <Card key={v.id} className="hover:shadow-md transition-shadow cursor-pointer">
+            <Card
+              key={v.id}
+              className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => setView('visit-detail', v.id)}
+            >
               <CardContent className="pt-4">
                 <div className="flex items-center justify-between mb-2">
                   <Badge variant={v.status === 'COMPLETED' ? 'default' : 'secondary'}>
@@ -117,6 +139,7 @@ export function VisitNewView() {
     treatmentPlan: '',
     followUpDate: '',
   })
+  const [createInvoice, setCreateInvoice] = useState(false)
   const [vitals, setVitals] = useState({
     bloodPressure: '',
     heartRate: '',
@@ -165,6 +188,7 @@ export function VisitNewView() {
           ...form,
           followUpDate: form.followUpDate || null,
           status: 'COMPLETED',
+          createInvoice,
           vitals: hasVitals ? vitalsPayload : undefined,
         }),
       })
@@ -282,6 +306,21 @@ export function VisitNewView() {
               <Label>Follow-up Date</Label>
               <Input type="date" value={form.followUpDate} onChange={(e) => setForm((f) => ({ ...f, followUpDate: e.target.value }))} />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4 flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="createInvoice"
+              checked={createInvoice}
+              onChange={(e) => setCreateInvoice(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <label htmlFor="createInvoice" className="text-sm cursor-pointer">
+              Generate invoice automatically after visit (using doctor&apos;s consultation fee)
+            </label>
           </CardContent>
         </Card>
 

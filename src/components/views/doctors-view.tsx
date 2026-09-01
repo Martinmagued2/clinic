@@ -130,6 +130,11 @@ export function DoctorsView() {
                     </div>
                   </div>
                 )}
+                <div className="mt-3 pt-3 border-t">
+                  <Button size="sm" variant="outline" onClick={() => useApp.getState().setView('doctors-schedule', d.id)}>
+                    Edit Schedule
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}

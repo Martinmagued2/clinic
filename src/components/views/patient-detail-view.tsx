@@ -2,15 +2,16 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { api } from '@/lib/api-client'
 import { useApp } from '@/lib/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Phone, Mail, MapPin, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Phone, Mail, MapPin, AlertTriangle, FileText } from 'lucide-react'
 import { calcAge, formatDate, formatDateTime, formatCurrency } from '@/lib/format'
+import { toast } from 'sonner'
 
 type PatientDetail = {
   patient: {
@@ -99,7 +100,12 @@ export function PatientDetailView() {
                 <span>· {p.gender || '—'}</span>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              {useApp.getState().hasPermission('patients.update') && (
+                <Button variant="outline" size="sm" onClick={() => setView('patient-edit', p.id)}>
+                  Edit
+                </Button>
+              )}
               {useApp.getState().hasPermission('appointments.create') && (
                 <Button variant="outline" size="sm" onClick={() => setView('appointment-new', p.id)}>
                   Book Appointment
@@ -108,6 +114,16 @@ export function PatientDetailView() {
               {useApp.getState().hasPermission('billing.create') && (
                 <Button variant="outline" size="sm" onClick={() => setView('invoice-new', p.id)}>
                   Create Invoice
+                </Button>
+              )}
+              {useApp.getState().hasPermission('medical_records.create') && (
+                <Button variant="outline" size="sm" onClick={() => setView('visit-new', p.id)}>
+                  New Visit
+                </Button>
+              )}
+              {useApp.getState().hasPermission('patients.view') && (
+                <Button variant="outline" size="sm" onClick={() => setView('documents', p.id)}>
+                  Documents
                 </Button>
               )}
             </div>
@@ -146,6 +162,7 @@ export function PatientDetailView() {
           <TabsTrigger value="prescriptions">Prescriptions ({p.prescriptions.length})</TabsTrigger>
           <TabsTrigger value="invoices">Invoices ({p.invoices.length})</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -303,6 +320,14 @@ export function PatientDetailView() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="documents">
+          <Card>
+            <CardContent className="pt-4">
+              <DocumentsTab patientId={p.id} />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   )
@@ -319,4 +344,82 @@ function Field({ label, value }: { label: string; value: string | null | undefin
 
 function Empty({ text }: { text: string }) {
   return <div className="text-center py-8 text-sm text-muted-foreground">{text}</div>
+}
+
+function DocumentsTab({ patientId }: { patientId: string }) {
+  const [docs, setDocs] = useState<Array<{ id: string; fileName: string; fileType: string; category: string; createdAt: string; uploadedBy: { name: string } }>>([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const load = async () => {
+    try {
+      const data = await api<{ documents: typeof docs }>(`/api/documents?patientId=${patientId}`)
+      setDocs(data.documents)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [patientId])
+
+  const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('patientId', patientId)
+      fd.append('category', 'OTHER')
+      await fetch('/api/documents', { method: 'POST', body: fd, credentials: 'same-origin' })
+      toast.success('Document uploaded.')
+      load()
+    } catch {
+      toast.error('Upload failed.')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  if (loading) return <div className="text-sm text-muted-foreground">Loading...</div>
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-between items-center">
+        <div className="text-sm font-medium">Patient Documents</div>
+        <div>
+          <input ref={fileRef} type="file" onChange={upload} className="hidden" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx" />
+          <Button size="sm" variant="outline" disabled={uploading} onClick={() => fileRef.current?.click()}>
+            {uploading ? 'Uploading...' : 'Upload Document'}
+          </Button>
+        </div>
+      </div>
+      {docs.length === 0 ? (
+        <Empty text="No documents uploaded." />
+      ) : (
+        <div className="divide-y">
+          {docs.map((d) => (
+            <div key={d.id} className="py-2 flex items-center gap-3">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <div className="flex-1 min-w-0">
+                <a
+                  href={`/api/documents/${d.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-medium hover:underline truncate block"
+                >
+                  {d.fileName}
+                </a>
+                <div className="text-xs text-muted-foreground">
+                  {d.category} · {formatDate(d.createdAt)} · {d.uploadedBy.name}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }

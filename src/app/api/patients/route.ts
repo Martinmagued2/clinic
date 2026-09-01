@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
 
     const where = {
       clinicId: user.clinicId!,
+      deletedAt: null, // exclude soft-deleted patients (spec #52)
       ...(search
         ? {
             OR: [

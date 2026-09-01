@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Plus, ArrowLeft, Loader2, Receipt } from 'lucide-react'
+import { Plus, ArrowLeft, Loader2, Receipt, Printer, RotateCcw } from 'lucide-react'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format'
 import { toast } from 'sonner'
 
@@ -27,6 +27,7 @@ type Invoice = {
   patient: { firstName: string; lastName: string; patientCode: string }
   items: Array<{ id: string; description: string; quantity: number; unitPrice: number; total: number }>
   payments: Array<{ id: string; amount: number; paymentMethod: string; paymentDate: string }>
+  refunds: Array<{ id: string; amount: number; reason: string | null; createdAt: string }>
 }
 
 type Patient = { id: string; firstName: string; lastName: string; patientCode: string }
@@ -138,8 +139,11 @@ export function InvoiceDetailView() {
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [loading, setLoading] = useState(true)
   const [showPayment, setShowPayment] = useState(false)
+  const [showRefund, setShowRefund] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('CASH')
+  const [refundAmount, setRefundAmount] = useState('')
+  const [refundReason, setRefundReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const load = async () => {
@@ -252,11 +256,26 @@ export function InvoiceDetailView() {
             </div>
           </div>
 
-          {balance > 0 && hasPermission('payments.create') && !showPayment && (
-            <Button onClick={() => setShowPayment(true)}>
-              <Receipt className="w-4 h-4 mr-1.5" /> Record Payment
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => window.open(`/api/print/invoice/${invoice.id}`, '_blank')}>
+              <Printer className="w-4 h-4 mr-1.5" /> Print Invoice
             </Button>
-          )}
+            {balance > 0 && hasPermission('payments.create') && !showPayment && (
+              <Button size="sm" onClick={() => setShowPayment(true)}>
+                <Receipt className="w-4 h-4 mr-1.5" /> Record Payment
+              </Button>
+            )}
+            {balance < 0 && hasPermission('billing.update') && !showRefund && (
+              <Button size="sm" variant="outline" onClick={() => setShowRefund(true)}>
+                <RotateCcw className="w-4 h-4 mr-1.5" /> Issue Refund
+              </Button>
+            )}
+            {invoice.paidAmount > 0 && hasPermission('billing.update') && !showRefund && balance === 0 && (
+              <Button size="sm" variant="outline" onClick={() => setShowRefund(true)}>
+                <RotateCcw className="w-4 h-4 mr-1.5" /> Issue Refund
+              </Button>
+            )}
+          </div>
 
           {showPayment && (
             <Card className="bg-muted/30">
@@ -286,6 +305,50 @@ export function InvoiceDetailView() {
                     Confirm Payment
                   </Button>
                   <Button variant="outline" onClick={() => setShowPayment(false)}>Cancel</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {showRefund && (
+            <Card className="bg-muted/30 border-orange-200">
+              <CardContent className="pt-4 space-y-3">
+                <div className="text-sm font-medium">Issue Refund</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Refund Amount</Label>
+                    <Input type="number" step="0.01" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} placeholder={`Max: ${formatCurrency(invoice.paidAmount)}`} />
+                  </div>
+                  <div>
+                    <Label>Reason</Label>
+                    <Input value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Optional" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={async () => {
+                      setSubmitting(true)
+                      try {
+                        await api(`/api/invoices/${invoice.id}/refunds`, {
+                          method: 'POST',
+                          body: JSON.stringify({ amount: Number(refundAmount), reason: refundReason || null }),
+                        })
+                        toast.success('Refund issued.')
+                        setShowRefund(false)
+                        setRefundAmount(''); setRefundReason('')
+                        load()
+                      } catch (err) {
+                        toast.error(err instanceof ApiError ? err.message : 'Failed.')
+                      } finally {
+                        setSubmitting(false)
+                      }
+                    }}
+                    disabled={submitting || !refundAmount}
+                  >
+                    {submitting && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+                    Confirm Refund
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowRefund(false)}>Cancel</Button>
                 </div>
               </CardContent>
             </Card>

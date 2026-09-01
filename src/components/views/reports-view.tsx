@@ -54,6 +54,17 @@ export function ReportsView() {
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 px-3 border rounded-md text-sm" />
           <span className="text-sm text-muted-foreground">to</span>
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 px-3 border rounded-md text-sm" />
+          <div className="flex gap-1">
+            {(['patients', 'appointments', 'invoices', 'payments'] as const).map((t) => (
+              <a
+                key={t}
+                href={`/api/export?type=${t}&from=${from}&to=${to}`}
+                className="px-2 py-1 border rounded text-xs hover:bg-accent capitalize"
+              >
+                Export {t}
+              </a>
+            ))}
+          </div>
         </div>
       </div>
 

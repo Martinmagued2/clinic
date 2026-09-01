@@ -16,13 +16,15 @@ export async function GET(req: NextRequest) {
     const user = await requirePermission('medical_records.view')
     const url = new URL(req.url)
     const patientId = url.searchParams.get('patientId')
+    const doctorId = url.searchParams.get('doctorId')
 
     const where: Record<string, unknown> = { clinicId: user.clinicId! }
     if (patientId) where.patientId = patientId
-
-    // Doctors only see their own visits unless clinic admin
+    // Doctors only see their own visits; admins can filter by doctorId
     if (user.role === 'DOCTOR' && user.doctorId) {
       where.doctorId = user.doctorId
+    } else if (doctorId) {
+      where.doctorId = doctorId
     }
 
     const visits = await db.visit.findMany({
@@ -54,6 +56,7 @@ const createVisitSchema = z.object({
   treatmentPlan: z.string().optional(),
   followUpDate: z.string().optional().nullable(),
   status: z.string().optional(),
+  createInvoice: z.boolean().optional(), // spec #103 — auto-generate invoice on completion
   vitals: z
     .object({
       bloodPressure: z.string().optional().nullable(),
@@ -75,7 +78,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return apiError('VALIDATION_ERROR', parsed.error.issues.map((i) => i.message).join('; '), 400)
     }
-    const { vitals, followUpDate, appointmentId, ...rest } = parsed.data
+    const { vitals, followUpDate, appointmentId, createInvoice, ...rest } = parsed.data
 
     // Tenant check
     const [patient, doctor] = await Promise.all([
@@ -108,6 +111,38 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // Auto-generate invoice if requested (spec #103)
+    let invoice: { id: string; invoiceCode: string } | null = null
+    if (createInvoice && visit.status === 'COMPLETED') {
+      const { nextInvoiceCode } = await import('@/lib/codes')
+      const invoiceCode = await nextInvoiceCode(user.clinicId!)
+      const consultationFee = doctor.consultationFee || 0
+      invoice = await db.invoice.create({
+        data: {
+          clinicId: user.clinicId!,
+          patientId: patient.id,
+          visitId: visit.id,
+          invoiceCode,
+          createdById: user.id,
+          status: 'ISSUED',
+          subtotal: consultationFee,
+          discount: 0,
+          tax: 0,
+          total: consultationFee,
+          paidAmount: 0,
+          items: {
+            create: [{
+              description: `Consultation — ${doctor.name}`,
+              quantity: 1,
+              unitPrice: consultationFee,
+              total: consultationFee,
+            }],
+          },
+        },
+        select: { id: true, invoiceCode: true },
+      })
+    }
+
     await audit({
       clinicId: user.clinicId,
       userId: user.id,
@@ -117,7 +152,7 @@ export async function POST(req: NextRequest) {
       newValues: visit,
     })
 
-    return apiSuccess({ visit }, 201)
+    return apiSuccess({ visit, invoice }, 201)
   } catch (err) {
     return handleApiError(err)
   }
