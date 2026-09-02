@@ -5,8 +5,13 @@
 // a `clinicId` so that data isolation is enforced at the data-access
 // layer (see src/lib/auth.ts -> requirePermission + tenantScope).
 //
-// Note: SQLite is used for local development. To deploy on PostgreSQL,
-// change the datasource provider to "postgresql" and update DATABASE_URL.
+// DUAL-DATABASE SUPPORT:
+// - Local dev: SQLite (provider = "sqlite")
+// - Production (Vercel + Supabase): PostgreSQL (provider = "postgresql")
+//
+// The vercel.json build command automatically switches the provider
+// from "sqlite" to "postgresql" during Vercel builds using sed.
+//
 // All enum-like fields use String + application-level validation to
 // stay portable across both databases.
 // =====================================================================
@@ -559,6 +564,7 @@ model AuditLog {
   oldValues  String?  // JSON string
   newValues  String?  // JSON string
   ipAddress  String?
+  userAgent  String?  // browser/client info
   createdAt  DateTime @default(now())
 
   clinic     Clinic?  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
@@ -567,6 +573,25 @@ model AuditLog {
   @@index([clinicId])
   @@index([userId])
   @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+// ---------------------------------------------------------------------
+// DATABASE-BACKED RATE LIMITING (spec #22)
+// Used in production (Vercel) where in-memory rate limiting doesn't
+// persist across serverless instances.
+// ---------------------------------------------------------------------
+
+model RateLimitEntry {
+  id        String   @id @default(cuid())
+  key       String   // e.g. "login:ip:1.2.3.4" or "login:email:foo@bar.com"
+  count     Int      @default(1)
+  windowStart DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@unique([key])
+  @@index([key, windowStart])
 }
 
 // ---------------------------------------------------------------------

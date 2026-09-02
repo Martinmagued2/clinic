@@ -1,180 +1,482 @@
-# Deployment Guide — Vercel + Supabase
+# Clinic Command Center — Production Deployment Guide
 
-This guide walks you through deploying the Clinic Command Center to Vercel with a Supabase PostgreSQL database.
+## Vercel + Supabase Only
 
-## Prerequisites
+This guide describes how to deploy the Clinic Command Center using only:
 
-- A [GitHub](https://github.com) account (repo already pushed)
-- A [Vercel](https://vercel.com) account (free tier is fine)
-- A [Supabase](https://supabase.com) account (free tier is fine)
+- **GitHub** — source code
+- **Vercel** — Next.js application hosting and deployment
+- **Supabase** — PostgreSQL database and file storage
+
+No AWS, Railway, Render, Upstash, Redis, or other external infrastructure is required.
 
 ---
 
-## Step 1: Create a Supabase Project
+# 1. Production Architecture
+
+```
+                    USER
+                     │
+                     ▼
+              ┌──────────────┐
+              │    Vercel    │
+              │              │
+              │   Next.js    │
+              │              │
+              │ Frontend     │
+              │ API Routes   │
+              └──────┬───────┘
+                     │
+              Prisma / PostgreSQL
+                     │
+                     ▼
+              ┌──────────────┐
+              │   Supabase   │
+              │              │
+              │ PostgreSQL   │
+              │              │
+              │ Storage      │
+              │              │
+              │ Backups      │
+              └──────────────┘
+```
+
+---
+
+# 2. Prerequisites
+
+- GitHub repository containing the project
+- Vercel account (free tier works)
+- Supabase account (free tier works)
+- Node.js/Bun installed locally
+- Prisma configured in the project
+
+---
+
+# 3. Create the Supabase Production Project
 
 1. Go to [supabase.com](https://supabase.com) → **New Project**
-2. Name it (e.g., `clinic-command-center`)
-3. Set a strong database password — **save this**, you'll need it
-4. Choose a region close to your users (e.g., `Southeast Asia (Singapore)` for Egypt/Europe)
-5. Wait ~2 minutes for the project to provision
-
-### Get your connection string
-
-1. In Supabase dashboard → **Settings** → **Database**
-2. Find **Connection string** → **URI** format
-3. Copy it — it looks like:
-   ```
-   postgresql://postgres:[YOUR-PASSWORD]@db.abcdefg.supabase.co:5432/postgres
-   ```
-4. Replace `[YOUR-PASSWORD]` with the password you set in step 3
+2. Name it: `clinic-command-center-production`
+3. **Do NOT use the development database as the production database**
+4. Choose a region geographically close to your users
+5. Set a strong database password — **save this securely**
+6. **Do not commit the password to GitHub**
 
 ---
 
-## Step 2: Deploy to Vercel
+# 4. Get the Database Connection String
+
+In Supabase:
+
+```
+Project → Connect → Connection String
+```
+
+**For Vercel/serverless:** use the **connection pooler** URL (port 6543):
+
+```
+postgresql://postgres.[YOUR-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+```
+
+Copy the exact value from the Supabase dashboard. **Do not manually construct the hostname.**
+
+The production environment variable will be:
+
+```
+DATABASE_URL
+```
+
+---
+
+# 5. Create Supabase Storage Buckets
+
+In Supabase:
+
+```
+Storage → New Bucket
+```
+
+Create a **private** bucket:
+
+```
+patient-documents
+```
+
+**Keep patient documents private.** Do not create public URLs for sensitive documents.
+
+The application uses signed URLs for secure, temporary access (5-minute expiry).
+
+---
+
+# 6. Get Supabase Storage Credentials
+
+In Supabase:
+
+```
+Settings → API
+```
+
+Copy:
+- **Project URL** (e.g., `https://abcdefg.supabase.co`)
+- **service_role secret key** (NOT the anon key — the service role key bypasses RLS)
+
+These go into Vercel as:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_KEY`
+
+---
+
+# 7. Prisma Migrations (Not db push)
+
+This project uses **Prisma migrations** for production database management.
+
+### How it works:
+
+**During development:**
+```bash
+bunx prisma migrate dev  # creates migration files
+```
+
+**During production deployment (Vercel):**
+```bash
+bunx prisma migrate deploy  # applies existing migrations
+```
+
+The `vercel.json` build command automatically:
+1. Switches Prisma provider from `sqlite` to `postgresql`
+2. Runs `prisma generate`
+3. Runs `prisma migrate deploy`
+4. Runs `next build`
+
+**Never run `prisma db push` in production.**
+
+---
+
+# 8. Do NOT Auto-Seed in Production
+
+The build command does **NOT** run database seeds automatically.
+
+**Production should never have demo accounts like `admin@clinic.test`.**
+
+To seed the database (for initial setup only, run manually once):
+
+```bash
+# From Vercel terminal or locally with production DATABASE_URL
+bun run db:seed
+```
+
+**Warning:** Only run this once during initial setup. Running it again will reset all data.
+
+---
+
+# 9. Create the Vercel Project
 
 1. Go to [vercel.com](https://vercel.com) → **Add New** → **Project**
-2. Import your GitHub repo: `Martinmagued2/clinic`
-3. Vercel auto-detects Next.js — **don't change the framework preset**
-4. **Environment Variables** — add these:
-
-   | Name | Value |
-   |------|-------|
-   | `DATABASE_URL` | `postgresql://postgres:YOUR_PASSWORD@db.YOUR_REF.supabase.co:5432/postgres` |
-   | `SESSION_SECRET` | Run `openssl rand -hex 32` in terminal and paste the result |
-   | `NODE_ENV` | `production` |
-
-5. Click **Deploy** — Vercel will:
-   - Install dependencies with `bun install`
-   - Switch Prisma to PostgreSQL (`sed` command in `vercel.json`)
-   - Generate Prisma client
-   - Push the database schema to Supabase
-   - Build the Next.js app
-   - Deploy to a global CDN
-
-6. Wait ~3-5 minutes for the first deployment to complete
+2. **Import Git Repository** → select `Martinmagued2/clinic`
+3. Vercel auto-detects Next.js — **keep the framework as Next.js**
 
 ---
 
-## Step 3: Seed the Database
+# 10. Configure Environment Variables
 
-After the first deployment, you need to seed the database with demo data:
+In Vercel:
 
-### Option A: Use Vercel terminal (recommended)
+```
+Project → Settings → Environment Variables
+```
 
-1. In Vercel dashboard → your project → **Developer Tools** → **Terminal**
-2. Run:
+### Required:
+
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | Supabase connection pooler URL (port 6543) |
+| `SESSION_SECRET` | Run `openssl rand -hex 32` locally, paste result |
+| `NODE_ENV` | `production` |
+
+### For file storage (required for document uploads):
+
+| Variable | Value |
+|----------|-------|
+| `SUPABASE_URL` | `https://[YOUR-PROJECT-REF].supabase.co` |
+| `SUPABASE_SERVICE_KEY` | Service role key from Supabase (NOT anon) |
+
+### Security:
+
+- **NEVER** use `NEXT_PUBLIC_` prefix for secrets
+- `NEXT_PUBLIC_DATABASE_URL`, `NEXT_PUBLIC_SESSION_SECRET` are FORBIDDEN
+- Database credentials and session secrets must remain server-side
+
+---
+
+# 11. Deploy
+
+Click **Deploy**. Vercel will:
+
+1. Clone the GitHub repository
+2. Install dependencies (`bun install`)
+3. Switch Prisma to PostgreSQL
+4. Generate Prisma Client
+5. Apply Prisma migrations (`migrate deploy`)
+6. Build Next.js
+7. Deploy to global CDN
+
+Wait for deployment to finish (~3-5 minutes).
+
+---
+
+# 12. Initial Database Setup
+
+After the first deployment, create your first admin user.
+
+### Option A: Use Vercel Terminal
+
+1. Vercel dashboard → your project → **Developer Tools** → **Terminal**
+2. Run the seed script (for demo data only — **not for real production**):
    ```bash
    bun run db:seed
    ```
 
-### Option B: Use Supabase SQL Editor
+### Option B: Create admin user via Supabase SQL
 
-1. In Supabase dashboard → **SQL Editor**
-2. Paste the contents of `scripts/seed.sql` (if available) or run the seed script locally with the Supabase URL
+Run this in Supabase SQL Editor (replace email/password):
 
----
+```sql
+-- Insert clinic
+INSERT INTO "Clinic" (id, name, "currencyCode", "localeCode", timezone, status, "createdAt", "updatedAt")
+VALUES ('clinic-1', 'Your Clinic Name', 'EGP', 'en', 'Africa/Cairo', 'ACTIVE', NOW(), NOW());
 
-## Step 4: Verify the Deployment
+-- Insert admin user (password: change this!)
+INSERT INTO "User" (id, "clinicId", email, "passwordHash", name, role, status, "createdAt", "updatedAt")
+VALUES ('user-1', 'clinic-1', 'admin@yourclinic.com', '<HASHED_PASSWORD>', 'Admin', 'CLINIC_ADMIN', 'ACTIVE', NOW(), NOW());
+```
 
-1. Visit your Vercel URL (e.g., `https://clinic-command-center.vercel.app`)
-2. Log in with:
-   - **Email:** `admin@clinic.test`
-   - **Password:** `admin123`
-3. You should see the dashboard with data
-
----
-
-## Step 5: Custom Domain (optional)
-
-1. In Vercel dashboard → your project → **Settings** → **Domains**
-2. Add your domain (e.g., `clinic.yourdomain.com`)
-3. Add the DNS records Vercel shows you
-4. HTTPS is automatic
+**For the password hash:** run this locally to generate it:
+```bash
+bun -e "const { scryptSync, randomBytes } = require('crypto'); const salt = randomBytes(16).toString('hex'); const hash = scryptSync('YOUR_PASSWORD', salt, 64).toString('hex'); console.log(salt + ':' + hash);"
+```
 
 ---
 
-## How It Works
+# 13. Custom Domain
 
-### Database (Supabase PostgreSQL)
+After deployment works:
 
-The `vercel.json` build command automatically:
-1. Switches the Prisma provider from `sqlite` to `postgresql` using `sed`
-2. Runs `prisma generate` to create the client
-3. Runs `prisma db push` to create all tables in Supabase
-4. Builds the Next.js app
+```
+Vercel → Project → Settings → Domains → Add Domain
+```
 
-This means:
-- **Local dev:** uses SQLite (fast, zero-config)
-- **Production (Vercel):** uses Supabase PostgreSQL (scalable, persistent)
+1. Add your domain (e.g., `clinic.yourdomain.com`)
+2. Configure the DNS records Vercel provides
+3. Vercel automatically provisions HTTPS
 
-### File Storage (Documents)
+---
+
+# 14. Verify Production Cookies
+
+After deploying, verify in browser developer tools that the session cookie is:
+
+- ✅ `HttpOnly`
+- ✅ `Secure`
+- ✅ `SameSite=Lax`
+
+And that it's associated with your production domain.
+
+---
+
+# 15. Rate Limiting
+
+- **Local dev:** in-memory rate limiting (fast, no DB)
+- **Vercel (production):** automatically uses database-backed rate limiting
+  - Persists across serverless instances
+  - Uses the `RateLimitEntry` table in PostgreSQL
+  - No Redis/Upstash needed
+
+Rate limits:
+- Login: 10 attempts per minute per IP
+- Per account: 5 failed attempts per 15 minutes
+
+---
+
+# 16. Audit Logging
+
+All sensitive actions are logged with:
+- User ID
+- Action (e.g., `PATIENT_CREATED`, `APPOINTMENT_CANCELLED`)
+- Entity type and ID
+- Old/new values (JSON)
+- IP address
+- User agent
+- Timestamp
+
+View audit logs in the app: **Sidebar → Audit Logs**
+
+---
+
+# 17. Document Storage
 
 - **Local dev:** files stored in `/uploads` directory
-- **Vercel:** files stored as base64 in the database (serverless-friendly)
-- The app auto-detects the environment via `process.env.VERCEL`
+- **Production (Vercel):** files stored in Supabase Storage (private bucket)
+- Documents are served via **signed URLs** (5-minute expiry)
+- **Never publicly accessible** — all access requires authentication
 
-### Rate Limiting
-
-- **Local dev:** in-memory rate limiting works perfectly
-- **Vercel:** in-memory rate limiting resets per serverless instance
-- For production-grade rate limiting, add [Upstash Redis](https://upstash.com) (free tier) and update `src/lib/rate-limit.ts`
+If Supabase Storage is not configured, files fall back to database storage (base64, limited to 5MB).
 
 ---
 
-## Troubleshooting
+# 18. Health Check
+
+Verify the app is running:
+
+```
+GET /api/health
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "timestamp": "2026-09-02T12:00:00.000Z",
+    "services": {
+      "database": "ok",
+      "storage": "configured"
+    }
+  }
+}
+```
+
+---
+
+# 19. Production Testing Checklist
+
+After deployment, test all of the following:
+
+### Application
+- [ ] Homepage loads
+- [ ] Login works
+- [ ] Logout works
+- [ ] Dashboard loads
+- [ ] Navigation works
+
+### Patients
+- [ ] Create patient
+- [ ] View patient
+- [ ] Edit patient
+- [ ] Search patient
+- [ ] Patient permissions work
+
+### Appointments
+- [ ] Create appointment
+- [ ] Edit appointment
+- [ ] Cancel appointment
+- [ ] Appointment filtering works
+
+### Medical Records
+- [ ] Create medical record
+- [ ] View medical record
+- [ ] Edit medical record
+- [ ] Unauthorized users cannot access records
+
+### Documents
+- [ ] Upload document
+- [ ] View document
+- [ ] Download document
+- [ ] Unauthorized users cannot access document
+
+### Security
+- [ ] HTTPS works
+- [ ] Authentication cookies are secure (HttpOnly, Secure, SameSite)
+- [ ] API authorization works
+- [ ] Invalid requests are rejected
+- [ ] Rate limiting works
+- [ ] Sensitive data is not exposed in logs
+
+---
+
+# 20. Environment Variables Summary
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DATABASE_URL` | Yes | Supabase PostgreSQL connection (pooler URL) |
+| `SESSION_SECRET` | Yes | Secure session cookies |
+| `NODE_ENV` | Yes | `production` |
+| `SUPABASE_URL` | For file storage | Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | For file storage | Supabase service role key |
+| `VERCEL` | Auto | Set by Vercel |
+| `VERCEL_URL` | Auto | Set by Vercel |
+
+---
+
+# 21. What NOT to Use
+
+This deployment does **NOT** require:
+
+- ❌ AWS
+- ❌ Railway
+- ❌ Render
+- ❌ Heroku
+- ❌ Upstash
+- ❌ Redis
+- ❌ Cloudinary
+- ❌ Firebase
+- ❌ MongoDB
+- ❌ DigitalOcean
+
+The production infrastructure is only:
+
+```
+GitHub + Vercel + Supabase
+```
+
+---
+
+# 22. Deployment Workflow (Future Updates)
+
+Once initial deployment is complete:
+
+```
+Developer changes code
+    ↓
+Update Prisma schema if necessary
+    ↓
+Create migration: bunx prisma migrate dev --name descriptive_name
+    ↓
+Test locally: bun run dev
+    ↓
+Commit code + migrations
+    ↓
+Push to GitHub
+    ↓
+Vercel automatically builds and deploys
+    ↓
+prisma generate → prisma migrate deploy → next build
+```
+
+**Never manually modify the production database schema.** Use Prisma migrations.
+
+---
+
+# 23. Troubleshooting
 
 ### Build fails with "Prisma Client not generated"
-
-The `vercel.json` buildCommand runs `prisma generate` before `next build`. If it fails:
-1. Check that `DATABASE_URL` is set correctly in Vercel env vars
-2. Check Vercel build logs for the exact error
+- Check `DATABASE_URL` is set correctly in Vercel
+- Check Vercel build logs for the exact error
 
 ### Database connection errors
-
-1. Verify your Supabase project is active (not paused)
-2. Check the connection string format: `postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres`
-3. Make sure there are no special characters in the password that need URL encoding
-
-### "Authentication required" on all API calls
-
-This means the session cookie isn't being set. Check:
-1. `SESSION_SECRET` is set in Vercel env vars
-2. The deployed URL matches what you're accessing
+- Verify Supabase project is active (not paused)
+- Use the **connection pooler** URL (port 6543) for serverless
+- Check for special characters in password (URL-encode if needed)
 
 ### Documents don't upload
+- Set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` in Vercel
+- Verify the `patient-documents` bucket exists in Supabase
+- Check that the bucket is **private** (not public)
 
-On Vercel, file size is limited to 5MB (stored as base64 in the database). For larger files:
-1. Set up [Vercel Blob](https://vercel.com/docs/storage/vercel-blob)
-2. Add `BLOB_READ_WRITE_TOKEN` to env vars
-3. Update `src/app/api/documents/route.ts` to use `@vercel/blob`
+### "Authentication required" on all API calls
+- Check `SESSION_SECRET` is set in Vercel
+- Verify the deployed URL matches what you're accessing
 
----
-
-## Environment Variables Summary
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | Supabase PostgreSQL connection string |
-| `SESSION_SECRET` | Yes | Random 32-byte hex string for cookie signing |
-| `NODE_ENV` | Yes | Set to `production` |
-| `VERCEL` | Auto | Automatically set by Vercel |
-| `VERCEL_URL` | Auto | Automatically set by Vercel |
-
----
-
-## Local Development with Supabase (optional)
-
-If you want to use Supabase for local dev too (instead of SQLite):
-
-1. Create a `.env` file with your Supabase `DATABASE_URL`
-2. Change `prisma/schema.prisma`:
-   ```prisma
-   datasource db {
-     provider = "postgresql"  // was: sqlite
-     url      = env("DATABASE_URL")
-   }
-   ```
-3. Run `bun run db:push`
-4. Run `bun run db:seed`
-
-This gives you the same database in dev and prod.
+### Rate limiting not working
+- On Vercel, rate limiting uses the database (automatic)
+- Check that the `RateLimitEntry` table exists (run `prisma migrate deploy`)

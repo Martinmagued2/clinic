@@ -2,6 +2,8 @@
 // Audit log helper — wraps db.auditLog.create with safe JSON
 // serialization and never throws (audit failures must not break the
 // main request flow per spec #48).
+//
+// Supports both ipAddress and userAgent (spec #23).
 // =====================================================================
 
 import { db } from './db'
@@ -15,6 +17,7 @@ export async function audit(params: {
   oldValues?: unknown
   newValues?: unknown
   ipAddress?: string | null
+  userAgent?: string | null
 }): Promise<void> {
   try {
     await db.auditLog.create({
@@ -27,6 +30,7 @@ export async function audit(params: {
         oldValues: params.oldValues ? JSON.stringify(params.oldValues) : null,
         newValues: params.newValues ? JSON.stringify(params.newValues) : null,
         ipAddress: params.ipAddress ?? null,
+        userAgent: params.userAgent ?? null,
       },
     })
   } catch (err) {

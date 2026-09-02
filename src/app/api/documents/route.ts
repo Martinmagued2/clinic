@@ -1,5 +1,5 @@
 // Documents API — list / upload (spec #33)
-// Works on both local dev (filesystem) and Vercel (database storage).
+// Uses Supabase Storage in production, filesystem in dev.
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
@@ -10,12 +10,9 @@ import {
   handleApiError,
 } from '@/lib/auth'
 import { audit } from '@/lib/audit'
-import { writeFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
-import path from 'path'
+import { uploadFile, BUCKET_PATIENT_DOCS } from '@/lib/storage'
 
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads')
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB (reduced for DB storage compatibility)
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_TYPES = [
   'application/pdf',
   'image/jpeg',
@@ -26,8 +23,8 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]
 
-// On Vercel, the filesystem is read-only, so we store files in the database.
-const IS_VERCEL = !!process.env.VERCEL
+// Validate file extension (don't trust MIME type alone — spec #18)
+const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.doc', '.docx']
 
 export async function GET(req: NextRequest) {
   try {
@@ -74,39 +71,36 @@ export async function POST(req: NextRequest) {
     const category = (formData.get('category') as string) || 'OTHER'
     const description = (formData.get('description') as string) || null
 
+    // Validation (spec #18)
     if (!file || !patientId) {
       return apiError('VALIDATION_ERROR', 'File and patientId are required.', 400)
     }
     if (file.size > MAX_FILE_SIZE) {
-      return apiError('FILE_TOO_LARGE', 'File exceeds 5MB limit.', 413)
+      return apiError('FILE_TOO_LARGE', 'File exceeds 10MB limit.', 413)
     }
     if (!ALLOWED_TYPES.includes(file.type)) {
       return apiError('UNSUPPORTED_TYPE', 'File type not allowed.', 415)
     }
 
-    // Tenant check
+    // Validate extension (don't trust MIME alone)
+    const ext = '.' + (file.name.split('.').pop() || '').toLowerCase()
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      return apiError('UNSUPPORTED_TYPE', 'File extension not allowed.', 415)
+    }
+
+    // Tenant check (spec #16)
     const patient = await db.patient.findUnique({ where: { id: patientId } })
     if (!patient || patient.clinicId !== user.clinicId) {
       return apiError('NOT_FOUND', 'Patient not found.', 404)
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const ext = file.name.split('.').pop() || ''
-    const storageKey = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`
+    const storagePath = `${patientId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`
 
-    let fileData: string | null = null
+    // Upload to Supabase Storage (or filesystem in dev)
+    await uploadFile(BUCKET_PATIENT_DOCS, storagePath, buffer, file.type)
 
-    if (IS_VERCEL) {
-      // On Vercel: store as base64 in database (serverless-friendly)
-      fileData = buffer.toString('base64')
-    } else {
-      // Local dev: store on filesystem
-      if (!existsSync(UPLOAD_DIR)) {
-        await mkdir(UPLOAD_DIR, { recursive: true })
-      }
-      await writeFile(path.join(UPLOAD_DIR, storageKey), buffer)
-    }
-
+    // Store metadata in database (spec #17 — database has metadata, storage has file)
     const document = await db.document.create({
       data: {
         clinicId: user.clinicId!,
@@ -115,8 +109,7 @@ export async function POST(req: NextRequest) {
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,
-        storageKey,
-        fileData,
+        storageKey: storagePath,
         category,
         description,
         uploadedById: user.id,
@@ -129,7 +122,9 @@ export async function POST(req: NextRequest) {
       action: 'DOCUMENT_UPLOADED',
       entityType: 'Document',
       entityId: document.id,
-      newValues: { fileName: file.name, patientId },
+      newValues: { fileName: file.name, patientId, size: file.size },
+      ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      userAgent: req.headers.get('user-agent'),
     })
 
     return apiSuccess({ document }, 201)

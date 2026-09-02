@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
   try {
     // Rate limit: 10 login attempts per minute per IP (spec #6, #23)
     const ip = getClientIP(req)
-    const rl = rateLimit(`login:${ip}`, 10, 60_000)
+    const userAgent = req.headers.get('user-agent') || 'unknown'
+    const rl = await rateLimit(`login:${ip}`, 10, 60_000)
     if (!rl.allowed) {
       return apiError(
         'RATE_LIMITED',
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
     const { email, password } = parsed.data
 
     // Per-account rate limit: 5 failed attempts per 15 minutes per email
-    const accountRl = rateLimit(`login-account:${email.toLowerCase()}`, 5, 15 * 60_000)
+    const accountRl = await rateLimit(`login-account:${email.toLowerCase()}`, 5, 15 * 60_000)
     if (!accountRl.allowed) {
       return apiError(
         'ACCOUNT_LOCKED',
@@ -68,6 +69,18 @@ export async function POST(req: NextRequest) {
       data: { lastLoginAt: new Date() },
     })
     await setSessionCookie(user.id)
+
+    // Audit log: successful login (spec #23)
+    const { audit } = await import('@/lib/audit')
+    await audit({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: 'USER_LOGIN',
+      entityType: 'User',
+      entityId: user.id,
+      ipAddress: ip,
+      userAgent,
+    })
 
     return apiSuccess({
       user: {
