@@ -1,0 +1,6 @@
+# Caddyfile — gateway configuration for the sandbox
+# Routes external traffic to the Next.js dev server on port 3000
+
+:80 {
+	reverse_proxy localhost:3000
+}
