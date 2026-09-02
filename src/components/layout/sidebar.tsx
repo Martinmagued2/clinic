@@ -27,6 +27,7 @@ import {
   Building2,
   Tv,
   Globe,
+  MessageSquare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -86,9 +87,19 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { view: 'documents', label: 'Documents', icon: FileText, permission: 'patients.view' },
       { view: 'lab-results', label: 'Lab Results', icon: FlaskConical, permission: 'patients.view' },
       { view: 'follow-ups', label: 'Follow-ups', icon: CalendarClock, permission: 'medical_records.view' },
+      { view: 'waitlist', label: 'Waitlist', icon: ListOrdered },
+      { view: 'messages', label: 'Messages', icon: MessageSquare },
       { view: 'waiting-room', label: 'Waiting Room Display', icon: Tv },
       { view: 'online-booking', label: 'Online Booking (Public)', icon: Globe },
       { view: 'patient-portal', label: 'Patient Portal', icon: UserCog },
+    ],
+  },
+  {
+    title: 'Business',
+    items: [
+      { view: 'inventory', label: 'Inventory', icon: Tag },
+      { view: 'insurance', label: 'Insurance', icon: ShieldCheck },
+      { view: 'subscription', label: 'Subscription', icon: Settings, permission: 'settings.view' },
     ],
   },
 ]

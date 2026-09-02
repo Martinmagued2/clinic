@@ -43,6 +43,8 @@ export function PrescriptionNewView() {
   const [doctorId, setDoctorId] = useState('')
   const [visitId, setVisitId] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
+  const [warnings, setWarnings] = useState<Array<{ type: string; severity: string; message: string }>>([])
+  const [checking, setChecking] = useState(false)
   const [items, setItems] = useState<Item[]>([
     { medicationName: '', strength: '', dosage: '', frequency: '', duration: '', route: 'Oral', instructions: '' },
   ])
@@ -217,6 +219,53 @@ export function PrescriptionNewView() {
             ))}
           </CardContent>
         </Card>
+
+        {/* Drug interaction & allergy check */}
+        {patientId && items.some((i) => i.medicationName) && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Safety Check</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={checking || !patientId}
+                onClick={async () => {
+                  setChecking(true); setWarnings([])
+                  try {
+                    const allWarnings: typeof warnings = []
+                    for (const item of items) {
+                      if (!item.medicationName) continue
+                      const result = await api<{ warnings: typeof warnings; safe: boolean }>('/api/drug-interactions', {
+                        method: 'POST',
+                        body: JSON.stringify({ patientId, medicationName: item.medicationName }),
+                      })
+                      allWarnings.push(...result.warnings)
+                    }
+                    setWarnings(allWarnings)
+                    if (allWarnings.length === 0) toast.success('No interactions or allergies detected.')
+                    else toast.warning(`${allWarnings.length} safety warning(s) found.`)
+                  } catch (err) {
+                    toast.error(err instanceof ApiError ? err.message : 'Check failed.')
+                  } finally {
+                    setChecking(false)
+                  }
+                }}
+              >
+                {checking ? 'Checking...' : 'Check Interactions & Allergies'}
+              </Button>
+              {warnings.length > 0 && (
+                <div className="space-y-1">
+                  {warnings.map((w, i) => (
+                    <div key={i} className={`text-xs p-2 rounded border ${w.severity === 'CRITICAL' ? 'bg-red-50 border-red-200 text-red-700' : w.severity === 'HIGH' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-blue-50 border-blue-200 text-blue-700'}`}>
+                      <strong>{w.type}:</strong> {w.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader><CardTitle className="text-base">Notes</CardTitle></CardHeader>

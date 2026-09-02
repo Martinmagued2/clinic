@@ -41,6 +41,11 @@ export type AppView =
   | 'waiting-room'
   | 'branches'
   | 'doctors-schedule'
+  | 'inventory'
+  | 'insurance'
+  | 'messages'
+  | 'subscription'
+  | 'waitlist'
 
 type AppState = {
   user: {

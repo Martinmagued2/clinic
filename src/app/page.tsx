@@ -42,6 +42,10 @@ import { BranchesView } from '@/components/views/branches-view'
 import { WaitingRoomView } from '@/components/views/waiting-room-view'
 import { OnlineBookingView } from '@/components/views/online-booking-view'
 import { PatientPortalView } from '@/components/views/patient-portal-view'
+import { InventoryView } from '@/components/views/inventory-view'
+import { InsuranceView } from '@/components/views/insurance-view'
+import { MessagesView } from '@/components/views/messages-view'
+import { SubscriptionView } from '@/components/views/subscription-view'
 import { Loader2 } from 'lucide-react'
 
 export default function Home() {
@@ -170,6 +174,11 @@ export default function Home() {
       case 'waiting-room': return <WaitingRoomView />
       case 'online-booking': return <OnlineBookingView />
       case 'patient-portal': return <PatientPortalView />
+      case 'inventory': return <InventoryView />
+      case 'insurance': return <InsuranceView />
+      case 'messages': return <MessagesView />
+      case 'subscription': return <SubscriptionView />
+      case 'waitlist': return <FollowUpsView />
       default: return <DashboardView />
     }
   }

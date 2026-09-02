@@ -140,6 +140,8 @@ export function VisitNewView() {
     followUpDate: '',
   })
   const [createInvoice, setCreateInvoice] = useState(false)
+  const [aiNotes, setAiNotes] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
   const [vitals, setVitals] = useState({
     bloodPressure: '',
     heartRate: '',
@@ -272,6 +274,45 @@ export function VisitNewView() {
               <Label className="text-xs">O2 Sat (%)</Label>
               <Input type="number" value={vitals.oxygenSaturation} onChange={(e) => setVitals((v) => ({ ...v, oxygenSaturation: e.target.value }))} />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>AI Documentation Assistant</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            <Label>Raw Notes (type or dictate — AI will structure them)</Label>
+            <Textarea value={aiNotes} onChange={(e) => setAiNotes(e.target.value)} rows={3} placeholder="e.g. Patient complains of headache for 3 days, no fever. BP 130/85. Likely tension headache. Prescribe paracetamol, rest." />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={aiLoading || aiNotes.length < 10}
+              onClick={async () => {
+                setAiLoading(true)
+                try {
+                  const result = await api<{ structured: { chiefComplaint: string; symptoms: string; examination: string; assessment: string; diagnosis: string; treatmentPlan: string } }>('/api/ai/suggest', {
+                    method: 'POST',
+                    body: JSON.stringify({ rawNotes: aiNotes }),
+                  })
+                  setForm((f) => ({
+                    ...f,
+                    chiefComplaint: result.structured.chiefComplaint || f.chiefComplaint,
+                    symptoms: result.structured.symptoms || f.symptoms,
+                    examination: result.structured.examination || f.examination,
+                    assessment: result.structured.assessment || f.assessment,
+                    diagnosis: result.structured.diagnosis || f.diagnosis,
+                    treatmentPlan: result.structured.treatmentPlan || f.treatmentPlan,
+                  }))
+                  toast.success('AI structured your notes.')
+                } catch (err) {
+                  toast.error(err instanceof ApiError ? err.message : 'AI service unavailable.')
+                } finally {
+                  setAiLoading(false)
+                }
+              }}
+            >
+              {aiLoading ? 'AI analyzing...' : '✨ Structure with AI'}
+            </Button>
           </CardContent>
         </Card>
 

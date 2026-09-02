@@ -10,6 +10,7 @@ import {
   Stethoscope, UserCog, ClipboardList, Pill, Receipt, CreditCard,
   BarChart3, ShieldCheck, Settings, FileText, FlaskConical,
   CalendarClock, Building2, Plus, Search, DoorOpen, Tv, Globe,
+  Tag, MessageSquare,
 } from 'lucide-react'
 
 type Command = {
@@ -49,6 +50,11 @@ const ALL_COMMANDS: Command[] = [
   { id: 'waiting-room', label: 'Waiting Room Display', icon: Tv, view: 'waiting-room' },
   { id: 'online-booking', label: 'Online Booking (Public)', icon: Globe, view: 'online-booking' },
   { id: 'patient-portal', label: 'Patient Portal', icon: UserCog, view: 'patient-portal' },
+  { id: 'inventory', label: 'Inventory', icon: Tag, view: 'inventory' },
+  { id: 'insurance', label: 'Insurance', icon: ShieldCheck, view: 'insurance' },
+  { id: 'messages', label: 'Messages', icon: MessageSquare, view: 'messages' },
+  { id: 'subscription', label: 'Subscription', icon: Settings, view: 'subscription', permission: 'settings.view' },
+  { id: 'waitlist', label: 'Waitlist', icon: ListOrdered, view: 'waitlist' },
 ]
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
