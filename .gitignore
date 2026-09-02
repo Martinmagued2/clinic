@@ -70,10 +70,11 @@ Thumbs.db
 /db/*.db
 /db/*.db-journal
 
-# Z scripts (internal sandbox tooling)
-/.zscripts/
+# Z scripts — KEEP these tracked so deployment works
+# (was /.zscripts/ but that caused deployment failures)
 dev.log
 
 # GitHub workflows (excluded from push — PAT lacks workflow scope; re-add locally)
 .github/
 /uploads/
+*.pid
