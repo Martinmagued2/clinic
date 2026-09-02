@@ -582,6 +582,7 @@ model Document {
   fileType     String   // MIME type
   fileSize     Int
   storageKey   String   // path in local /uploads or object storage
+  fileData     String?  // base64-encoded file content (for serverless/Vercel)
   category     String   @default("OTHER") // MEDICAL_REPORT | LAB_RESULT | XRAY | SCAN | OTHER
   description  String?
   uploadedById String
